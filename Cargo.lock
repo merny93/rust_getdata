@@ -236,6 +236,7 @@ name = "rust_getdata"
 version = "0.1.0"
 dependencies = [
  "bindgen",
+ "libc",
 ]
 
 [[package]]
