@@ -10,6 +10,7 @@ mod tests;
 
 use std::any::TypeId;
 use std::error;
+use std::fmt;
 use std::ffi::CStr;
 use std::ffi::CString;
 
@@ -50,8 +51,55 @@ pub enum GdError {
     UnknownEncoding(String), // GD_E_UNKNOWN_ENCODING
     Unsupported(String),     // GD_E_UNSUPPORTED
 }
+impl GdError {
+    fn message(&self) -> &str{
+       match self {
+            GdError::Alloc(msg) => msg,
+            GdError::Accmode(msg) => msg,
+            GdError::Argument(msg) => msg,
+            GdError::BadCode(msg) => msg,
+            GdError::BadDirfile(msg) => msg,
+            GdError::BadEntry(msg) => msg,
+            GdError::BadFieldType(msg) => msg,
+            GdError::BadIndex(msg) => msg,
+            GdError::BadReference(msg) => msg,
+            GdError::BadScalar(msg) => msg,
+            GdError::BadType(msg) => msg,
+            GdError::Bounds(msg) => msg,
+            GdError::Callback(msg) => msg,
+            GdError::Creat(msg) => msg,
+            GdError::Delete(msg) => msg,
+            GdError::Dimension(msg) => msg,
+            GdError::Domain(msg) => msg,
+            GdError::Duplicate(msg) => msg,
+            GdError::Exists(msg) => msg,
+            GdError::Format(msg) => msg,
+            GdError::InternalError(msg) => msg,
+            GdError::Io(msg) => msg,
+            GdError::LineTooLong(msg) => msg,
+            GdError::Lut(msg) => msg,
+            GdError::Protected(msg) => msg,
+            GdError::Range(msg) => msg,
+            GdError::RecurseLevel(msg) => msg,
+            GdError::UncleanDb(msg) => msg,
+            GdError::UnknownEncoding(msg) => msg,
+            GdError::Unsupported(msg) => msg,
+        }
+    }
+}
 
-impl error::Error for GdError {}
+impl fmt::Display for GdError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "GetData Error: {}", self.message())
+    }
+}
+
+impl error::Error for GdError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        // In this case, we have no underlying error, so we return None.
+        None
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum GdTypes {

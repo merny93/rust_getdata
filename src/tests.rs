@@ -154,10 +154,10 @@ fn test_highlevel_error(){
     let dirfile = dirfile.unwrap();
     unsafe{
     let fieldcode = CString::new("testfield").unwrap();
-    let n_pts = gd_getdata(dirfile.dirfile.unwrap().as_ptr(), fieldcode.as_ptr(), 0, 0, 10, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
+    let _n_pts = gd_getdata(dirfile.dirfile.unwrap().as_ptr(), fieldcode.as_ptr(), 0, 0, 10, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
     }
     let er = dirfile.get_error().unwrap();
-    assert_eq!(er., Some("Field not found: testfield".to_string()));
+    assert_eq!(er.message(), &"Field not found: testfield".to_string());
 
     std::fs::remove_dir_all(file_name).unwrap();
 
