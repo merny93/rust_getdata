@@ -16,7 +16,7 @@ use std::ffi::CString;
 
 //lets make a struct to hold the dirfile
 pub struct Dirfile {
-    pub dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
+    dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
 }
 #[derive(Debug)]
 pub enum GdError {
@@ -190,7 +190,7 @@ pub struct Entry {
     pub fragment_index: i32,
     pub entry_type: EntryType,
     entry_c: ffi::gd_entry_t,
-    _field_code_c: CString,
+    _field_code_c: CString, //keep this around to make sure the string is not deallocated, it is used in the entry_c
 }
 
 impl Entry {
@@ -217,7 +217,7 @@ impl Entry {
             _field_code_c: field_code_c,
         }
     }
-    pub fn from_c(field_code: &str, fragment_index: i32, entry_c: ffi::gd_entry_t) -> Entry {
+    fn from_c(field_code: &str, fragment_index: i32, entry_c: ffi::gd_entry_t) -> Entry {
         let field_code_c: CString = CString::new(field_code).unwrap();
 
         let entry_type: EntryType = unsafe {
