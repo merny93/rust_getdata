@@ -13,11 +13,46 @@ use std::error;
 use std::ffi::CStr;
 use std::ffi::CString;
 
-
 //lets make a struct to hold the dirfile
 pub struct Dirfile {
     pub dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
 }
+#[derive(Debug)]
+pub enum GdError {
+    Alloc(String),           // GD_E_ALLOC
+    Accmode(String),         // GD_E_ACCMODE
+    Argument(String),        // GD_E_ARGUMENT
+    BadCode(String),         // GD_E_BAD_CODE
+    BadDirfile(String),      // GD_E_BAD_DIRFILE
+    BadEntry(String),        // GD_E_BAD_ENTRY
+    BadFieldType(String),    // GD_E_BAD_FIELD_TYPE
+    BadIndex(String),        // GD_E_BAD_INDEX
+    BadReference(String),    // GD_E_BAD_REFERENCE
+    BadScalar(String),       // GD_E_BAD_SCALAR
+    BadType(String),         // GD_E_BAD_TYPE
+    Bounds(String),          // GD_E_BOUNDS
+    Callback(String),        // GD_E_CALLBACK
+    Creat(String),           // GD_E_CREAT
+    Delete(String),          // GD_E_DELETE
+    Dimension(String),       // GD_E_DIMENSION
+    Domain(String),          // GD_E_DOMAIN
+    Duplicate(String),       // GD_E_DUPLICATE
+    Exists(String),          // GD_E_EXISTS
+    Format(String),          // GD_E_FORMAT
+    InternalError(String),   // GD_E_INTERNAL_ERROR
+    Io(String),              // GD_E_IO
+    LineTooLong(String),     // GD_E_LINE_TOO_LONG
+    Lut(String),             // GD_E_LUT
+    Protected(String),       // GD_E_PROTECTED
+    Range(String),           // GD_E_RANGE
+    RecurseLevel(String),    // GD_E_RECURSE_LEVEL
+    UncleanDb(String),       // GD_E_UNCLEAN_DB
+    UnknownEncoding(String), // GD_E_UNKNOWN_ENCODING
+    Unsupported(String),     // GD_E_UNSUPPORTED
+}
+
+impl error::Error for GdError {}
+
 #[derive(Clone, Copy)]
 pub enum GdTypes {
     Float32,
@@ -164,7 +199,7 @@ pub enum FieldOrEntry {
 
 impl Dirfile {
     /// Open a dirfile in read/write mode, creating it if it does not exist
-    pub fn open(dirfile_name: &str) -> Result<Dirfile, String> {
+    pub fn open(dirfile_name: &str) -> Result<Dirfile, GdError> {
         let dirfile_name = CString::new(dirfile_name).unwrap();
         let dirfile =
             unsafe { ffi::gd_open(dirfile_name.as_ptr(), (ffi::GD_RDWR | ffi::GD_CREAT).into()) };
@@ -175,12 +210,11 @@ impl Dirfile {
             None => Ok(Dirfile {
                 dirfile: std::ptr::NonNull::new(dirfile),
             }),
-            Some(error) => { 
+            Some(error) => {
                 unsafe { ffi::gd_close(dirfile) };
                 Err(error)
-            },
+            }
         }
-        
     }
     /// Close the dirfile
     pub fn close(&mut self) {
@@ -189,7 +223,7 @@ impl Dirfile {
     }
 
     /// add entry
-    pub fn add(&mut self, entry: &Entry) -> Result<(), String> {
+    pub fn add(&mut self, entry: &Entry) -> Result<(), GdError> {
         let ret_val = unsafe {
             ffi::gd_add(
                 self.dirfile.expect("Open the dirfile!").as_ptr(),
@@ -203,7 +237,7 @@ impl Dirfile {
         }
     }
 
-    pub fn get_entry(&self, field_code: &str) -> Result<Entry, String> {
+    pub fn get_entry(&self, field_code: &str) -> Result<Entry, GdError> {
         let field_code = CString::new(field_code).unwrap();
         let mut entry_c: ffi::gd_entry_t;
         unsafe {
@@ -229,7 +263,7 @@ impl Dirfile {
         &mut self,
         field_or_entry: FieldOrEntry,
         data: &Vec<T>,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, GdError> {
         let entry = match field_or_entry {
             FieldOrEntry::Field(field_code) => self.get_entry(&field_code).unwrap(),
             FieldOrEntry::Entry(entry) => entry,
@@ -244,8 +278,8 @@ impl Dirfile {
                     "Data type mismatch"
                 );
                 //figure out how much data to write
-                let num_frames: usize = data.len()/spf.unwrap() as usize;
-                let num_samples: usize = data.len()%spf.unwrap() as usize;
+                let num_frames: usize = data.len() / spf.unwrap() as usize;
+                let num_samples: usize = data.len() % spf.unwrap() as usize;
                 //create a c string
                 let field_code = CString::new(entry.field_code).unwrap();
                 //write data, will need to update the offset and stuff...
@@ -264,7 +298,7 @@ impl Dirfile {
                 if write_n != data.len() {
                     match self.get_error() {
                         Some(error) => return Err(error),
-                        None => {},
+                        None => {}
                     };
                 }
                 Ok(write_n)
@@ -272,21 +306,22 @@ impl Dirfile {
         }
     }
 
-    pub fn flush(&mut self) -> Result<(), String> {
-        let ret_val = unsafe { ffi::gd_flush(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut()) };
+    pub fn flush(&mut self) -> Result<(), GdError> {
+        let ret_val =
+            unsafe { ffi::gd_flush(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
         }
         Ok(())
     }
-    pub fn sync(&mut self) -> Result<(), String> {
+    pub fn sync(&mut self) -> Result<(), GdError> {
         let ret_val = unsafe { ffi::gd_sync(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
         }
         Ok(())
     }
-    pub fn metaflush(&mut self) -> Result<(), String> {
+    pub fn metaflush(&mut self) -> Result<(), GdError> {
         let ret_val = unsafe { ffi::gd_metaflush(self.dirfile.unwrap().as_ptr()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
@@ -294,15 +329,51 @@ impl Dirfile {
         Ok(())
     }
 
-    pub fn get_error(&self) -> Option<String> {
+    pub fn get_error(&self) -> Option<GdError> {
         let error = unsafe { ffi::gd_error(self.dirfile.unwrap().as_ptr()) };
         if error == ffi::GD_E_OK as i32 {
             return None;
         }
-        let error_string_ptr = unsafe { ffi::gd_error_string(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut(), 0) };
-    let error_string_cstr: &CStr = unsafe { CStr::from_ptr(error_string_ptr) };
-    let error_string = error_string_cstr.to_string_lossy().into_owned();
-    unsafe { libc::free(error_string_ptr as *mut libc::c_void) };  // Free the error string
-    Some(error_string)
+        let error_string_ptr = unsafe {
+            ffi::gd_error_string(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut(), 0)
+        };
+        let error_string_cstr: &CStr = unsafe { CStr::from_ptr(error_string_ptr) };
+        let error_string = error_string_cstr.to_string_lossy().into_owned();
+        unsafe { libc::free(error_string_ptr as *mut libc::c_void) }; // Free the error string
+        match error {
+            ffi::GD_E_ALLOC => Some(GdError::Alloc(error_string)),
+            ffi::GD_E_ACCMODE => Some(GdError::Accmode(error_string)),
+            ffi::GD_E_ARGUMENT => Some(GdError::Argument(error_string)),
+            ffi::GD_E_BAD_CODE => Some(GdError::BadCode(error_string)),
+            ffi::GD_E_BAD_DIRFILE => Some(GdError::BadDirfile(error_string)),
+            ffi::GD_E_BAD_ENTRY => Some(GdError::BadEntry(error_string)),
+            ffi::GD_E_BAD_FIELD_TYPE => Some(GdError::BadFieldType(error_string)),
+            ffi::GD_E_BAD_INDEX => Some(GdError::BadIndex(error_string)),
+            ffi::GD_E_BAD_REFERENCE => Some(GdError::BadReference(error_string)),
+            ffi::GD_E_BAD_SCALAR => Some(GdError::BadScalar(error_string)),
+            ffi::GD_E_BAD_TYPE => Some(GdError::BadType(error_string)),
+            ffi::GD_E_BOUNDS => Some(GdError::Bounds(error_string)),
+            ffi::GD_E_CALLBACK => Some(GdError::Callback(error_string)),
+            ffi::GD_E_CREAT => Some(GdError::Creat(error_string)),
+            ffi::GD_E_DELETE => Some(GdError::Delete(error_string)),
+            ffi::GD_E_DIMENSION => Some(GdError::Dimension(error_string)),
+            ffi::GD_E_DOMAIN => Some(GdError::Domain(error_string)),
+            ffi::GD_E_DUPLICATE => Some(GdError::Duplicate(error_string)),
+            ffi::GD_E_EXISTS => Some(GdError::Exists(error_string)),
+            ffi::GD_E_FORMAT => Some(GdError::Format(error_string)),
+            ffi::GD_E_INTERNAL_ERROR => Some(GdError::InternalError(error_string)),
+            ffi::GD_E_IO => Some(GdError::Io(error_string)),
+            ffi::GD_E_LINE_TOO_LONG => Some(GdError::LineTooLong(error_string)),
+            ffi::GD_E_LUT => Some(GdError::Lut(error_string)),
+            ffi::GD_E_PROTECTED => Some(GdError::Protected(error_string)),
+            ffi::GD_E_RANGE => Some(GdError::Range(error_string)),
+            ffi::GD_E_RECURSE_LEVEL => Some(GdError::RecurseLevel(error_string)),
+            ffi::GD_E_UNCLEAN_DB => Some(GdError::UncleanDb(error_string)),
+            ffi::GD_E_UNKNOWN_ENCODING => Some(GdError::UnknownEncoding(error_string)),
+            ffi::GD_E_UNSUPPORTED => Some(GdError::Unsupported(error_string)),
+            _ => {
+                panic!("Unsupported error");
+            }
+        }
     }
 }
