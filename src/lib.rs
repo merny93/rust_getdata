@@ -107,7 +107,11 @@ pub enum GdTypes {
     Float64,
     Int32,
     Int64,
+    Uint32,
+    Uint64,
 }
+
+
 
 impl From<GdTypes> for ffi::gd_type_t {
     fn from(gd_type: GdTypes) -> Self {
@@ -116,6 +120,8 @@ impl From<GdTypes> for ffi::gd_type_t {
             GdTypes::Float64 => ffi::gd_type_t_GD_FLOAT64,
             GdTypes::Int32 => ffi::gd_type_t_GD_INT32,
             GdTypes::Int64 => ffi::gd_type_t_GD_INT64,
+            GdTypes::Uint32 => ffi::gd_type_t_GD_UINT32,
+            GdTypes::Uint64 => ffi::gd_type_t_GD_UINT64,
         }
     }
 }
@@ -127,6 +133,8 @@ impl From<ffi::gd_type_t> for GdTypes {
             ffi::gd_type_t_GD_FLOAT64 => GdTypes::Float64,
             ffi::gd_type_t_GD_INT32 => GdTypes::Int32,
             ffi::gd_type_t_GD_INT64 => GdTypes::Int64,
+            ffi::gd_type_t_GD_UINT32 => GdTypes::Uint32,
+            ffi::gd_type_t_GD_UINT64 => GdTypes::Uint64,
             _ => {
                 panic!("Unsupported type");
             }
@@ -141,16 +149,22 @@ impl From<GdTypes> for TypeId {
             GdTypes::Float64 => TypeId::of::<f64>(),
             GdTypes::Int32 => TypeId::of::<i32>(),
             GdTypes::Int64 => TypeId::of::<i64>(),
+            GdTypes::Uint32 => TypeId::of::<u32>(),
+            GdTypes::Uint64 => TypeId::of::<u64>(),
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum EntryType {
     Raw {
         data_type: Option<GdTypes>,
         spf: Option<u32>,
     },
+    Linterp {
+        in_field: Option<CString>, //Input field
+        table: Option<CString>, //path to lookup table
+    }
     // Add other variants here
 }
 
@@ -158,6 +172,7 @@ impl From<EntryType> for ffi::gd_entype_t {
     fn from(entry_type: EntryType) -> Self {
         match entry_type {
             EntryType::Raw { .. } => ffi::gd_entype_t_GD_RAW_ENTRY,
+            EntryType::Linterp { .. } => ffi::gd_entype_t_GD_LINTERP_ENTRY,
             // Add other variants here
         }
     }
@@ -183,6 +198,12 @@ impl EntryType {
             spf: Some(spf),
         }
     }
+    pub fn new_linterp(in_field: &str, table: &str) -> Self {
+        EntryType::Linterp {
+            in_field: Some(CString::new(in_field).unwrap()),
+            table: Some(CString::new(table).unwrap()),
+        }
+    }
 }
 
 pub struct Entry {
@@ -202,12 +223,18 @@ impl Entry {
         }
         //assign the field name
         entry_c.field = field_code_c.as_ptr() as *mut i8;
-        match entry_type {
+        match entry_type.clone() {
             EntryType::Raw { data_type, spf } => {
-                entry_c.field_type = entry_type.into();
+                entry_c.field_type = entry_type.clone().into();
                 entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type = data_type.unwrap().into();
                 entry_c.__bindgen_anon_1.__bindgen_anon_1.spf = spf.unwrap();
             }
+            EntryType::Linterp { in_field, table } => {
+                entry_c.field_type = entry_type.clone().into();
+                entry_c.in_fields = [in_field.unwrap().as_ptr() as *mut i8; 3];
+                entry_c.__bindgen_anon_1.__bindgen_anon_6.table = table.unwrap().as_ptr() as *mut i8;
+            }
+
         }
         Entry {
             field_code: field_code.to_string(),
@@ -228,6 +255,10 @@ impl Entry {
                     )),
                     spf: Some(entry_c.__bindgen_anon_1.__bindgen_anon_1.spf),
                 },
+                EntryType::Linterp { .. } => EntryType::Linterp {
+                    in_field: Some(CString::from_raw(entry_c.in_fields[0])),
+                    table: Some(CString::from_raw(entry_c.__bindgen_anon_1.__bindgen_anon_6.table)),
+                } 
             }
         };
         Entry {
@@ -350,6 +381,9 @@ impl Dirfile {
                     };
                 }
                 Ok(write_n)
+            }
+            EntryType::Linterp { .. } => {
+                panic!("cant put data for linterp, only put data for RAW");
             }
         }
     }
