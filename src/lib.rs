@@ -10,9 +10,9 @@ mod tests;
 
 use std::any::TypeId;
 use std::error;
-use std::fmt;
 use std::ffi::CStr;
 use std::ffi::CString;
+use std::fmt;
 
 //lets make a struct to hold the dirfile
 pub struct Dirfile {
@@ -52,8 +52,8 @@ pub enum GdError {
     Unsupported(String),     // GD_E_UNSUPPORTED
 }
 impl GdError {
-    fn message(&self) -> &str{
-       match self {
+    fn message(&self) -> &str {
+        match self {
             GdError::Alloc(msg) => msg,
             GdError::Accmode(msg) => msg,
             GdError::Argument(msg) => msg,
@@ -111,8 +111,6 @@ pub enum GdTypes {
     Uint64,
 }
 
-
-
 impl From<GdTypes> for ffi::gd_type_t {
     fn from(gd_type: GdTypes) -> Self {
         match gd_type {
@@ -163,13 +161,12 @@ pub enum EntryType {
     },
     Linterp {
         in_field: Option<CString>, //Input field
-        table: Option<CString>, //path to lookup table
-    }
-    // Add other variants here
+        table: Option<CString>,    //path to lookup table
+    }, // Add other variants here
 }
 
-impl From<EntryType> for ffi::gd_entype_t {
-    fn from(entry_type: EntryType) -> Self {
+impl From<&EntryType> for ffi::gd_entype_t {
+    fn from(entry_type: &EntryType) -> Self {
         match entry_type {
             EntryType::Raw { .. } => ffi::gd_entype_t_GD_RAW_ENTRY,
             EntryType::Linterp { .. } => ffi::gd_entype_t_GD_LINTERP_ENTRY,
@@ -200,8 +197,8 @@ impl EntryType {
     }
     pub fn new_linterp(in_field: &str, table: &str) -> Self {
         EntryType::Linterp {
-            in_field: Some(CString::new(in_field).unwrap()),
-            table: Some(CString::new(table).unwrap()),
+            in_field: Some(CString::new(in_field.to_owned()).unwrap()),
+            table: Some(CString::new(table.to_owned()).unwrap()),
         }
     }
 }
@@ -223,18 +220,18 @@ impl Entry {
         }
         //assign the field name
         entry_c.field = field_code_c.as_ptr() as *mut i8;
-        match entry_type.clone() {
+        match &entry_type {
             EntryType::Raw { data_type, spf } => {
-                entry_c.field_type = entry_type.clone().into();
+                entry_c.field_type = ffi::gd_entype_t_GD_RAW_ENTRY;
                 entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type = data_type.unwrap().into();
                 entry_c.__bindgen_anon_1.__bindgen_anon_1.spf = spf.unwrap();
             }
             EntryType::Linterp { in_field, table } => {
-                entry_c.field_type = entry_type.clone().into();
-                entry_c.in_fields = [in_field.unwrap().as_ptr() as *mut i8; 3];
-                entry_c.__bindgen_anon_1.__bindgen_anon_6.table = table.unwrap().as_ptr() as *mut i8;
+                entry_c.field_type = ffi::gd_entype_t_GD_LINTERP_ENTRY;
+                entry_c.in_fields[0] = in_field.as_ref().unwrap().as_ptr() as *mut i8;
+                entry_c.__bindgen_anon_1.__bindgen_anon_6.table =
+                    table.as_ref().unwrap().as_ptr() as *mut i8;
             }
-
         }
         Entry {
             field_code: field_code.to_string(),
@@ -255,10 +252,9 @@ impl Entry {
                     )),
                     spf: Some(entry_c.__bindgen_anon_1.__bindgen_anon_1.spf),
                 },
-                EntryType::Linterp { .. } => EntryType::Linterp {
-                    in_field: Some(CString::from_raw(entry_c.in_fields[0])),
-                    table: Some(CString::from_raw(entry_c.__bindgen_anon_1.__bindgen_anon_6.table)),
-                } 
+                _ => {
+                    panic!("Unsupported entry type");
+                }
             }
         };
         Entry {
@@ -316,6 +312,32 @@ impl Dirfile {
         }
     }
 
+    pub fn add_alias(
+        &mut self,
+        alias_name: &str,
+        field_or_entry: FieldOrEntry,
+    ) -> Result<(), GdError> {
+        let alias_name = CString::new(alias_name).unwrap();
+
+        let field_code_c = match field_or_entry {
+            FieldOrEntry::Field(field_code) => CString::new(field_code).unwrap(),
+            FieldOrEntry::Entry(entry) => entry._field_code_c,
+        };
+
+        let ret_val = unsafe {
+            ffi::gd_add_alias(
+                self.dirfile.expect("Open the dirfile!").as_ptr(),
+                alias_name.as_ptr(),
+                field_code_c.as_ptr(),
+                0,
+            )
+        };
+        if ret_val == 0 {
+            Ok(())
+        } else {
+            Err(self.get_error().unwrap())
+        }
+    }
     pub fn get_entry(&self, field_code: &str) -> Result<Entry, GdError> {
         let field_code = CString::new(field_code).unwrap();
         let mut entry_c: ffi::gd_entry_t;

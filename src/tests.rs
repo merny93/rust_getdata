@@ -98,7 +98,13 @@ fn test_highlevel_add_entry(){
     let mut dirfile = super::Dirfile::open(file_name).unwrap();
     let entry = Entry::new("testfield", 0, EntryType::new_raw(GdTypes::Float32, 10));
     dirfile.add(&entry).unwrap();
+    let entry_interp = Entry::new("testfield_interp", 0, EntryType::new_linterp("testfield", "test_lut.lut"));
+    dirfile.add(&entry_interp).unwrap();
+    //add a alias
+    dirfile.add_alias("test_alias", FieldOrEntry::Entry(entry)).unwrap();
     dirfile.close();
+
+    panic!("test_highlevel_add_entry");
     // //check for the existance of the folder
     let path = std::path::Path::new(file_name);
     assert!(path.exists());
@@ -110,10 +116,12 @@ fn test_highlevel_add_entry(){
     // /ENCODING none
     // testfield RAW FLOAT32 10
     // /REFERENCE testfield
+    // /ALIAS test_alias testfield
     // this will be somewhere in that file but not at the top
     let format_file = std::fs::read_to_string(format!("{}/format", file_name)).unwrap();
     assert!(format_file.contains("testfield RAW FLOAT32 10"));
     assert!(format_file.contains("/REFERENCE testfield")); 
+    assert!(format_file.contains("/ALIAS test_alias testfield"));
 
     let mut dirfile = Dirfile::open(file_name).unwrap();
     let entry = dirfile.get_entry("testfield").unwrap();
