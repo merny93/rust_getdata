@@ -8,98 +8,24 @@ pub mod ffi {
 #[cfg(test)]
 mod tests;
 
+mod entry;
+
+use entry::{Entry, EntryType};
+
+mod gd_error;
+
+use gd_error::GdError;
+
 use std::any::TypeId;
-use std::error;
-use std::ffi::CStr;
+
 use std::ffi::CString;
-use std::fmt;
+
 
 //lets make a struct to hold the dirfile
 pub struct Dirfile {
     dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
 }
-#[derive(Debug)]
-pub enum GdError {
-    Alloc(String),           // GD_E_ALLOC
-    Accmode(String),         // GD_E_ACCMODE
-    Argument(String),        // GD_E_ARGUMENT
-    BadCode(String),         // GD_E_BAD_CODE
-    BadDirfile(String),      // GD_E_BAD_DIRFILE
-    BadEntry(String),        // GD_E_BAD_ENTRY
-    BadFieldType(String),    // GD_E_BAD_FIELD_TYPE
-    BadIndex(String),        // GD_E_BAD_INDEX
-    BadReference(String),    // GD_E_BAD_REFERENCE
-    BadScalar(String),       // GD_E_BAD_SCALAR
-    BadType(String),         // GD_E_BAD_TYPE
-    Bounds(String),          // GD_E_BOUNDS
-    Callback(String),        // GD_E_CALLBACK
-    Creat(String),           // GD_E_CREAT
-    Delete(String),          // GD_E_DELETE
-    Dimension(String),       // GD_E_DIMENSION
-    Domain(String),          // GD_E_DOMAIN
-    Duplicate(String),       // GD_E_DUPLICATE
-    Exists(String),          // GD_E_EXISTS
-    Format(String),          // GD_E_FORMAT
-    InternalError(String),   // GD_E_INTERNAL_ERROR
-    Io(String),              // GD_E_IO
-    LineTooLong(String),     // GD_E_LINE_TOO_LONG
-    Lut(String),             // GD_E_LUT
-    Protected(String),       // GD_E_PROTECTED
-    Range(String),           // GD_E_RANGE
-    RecurseLevel(String),    // GD_E_RECURSE_LEVEL
-    UncleanDb(String),       // GD_E_UNCLEAN_DB
-    UnknownEncoding(String), // GD_E_UNKNOWN_ENCODING
-    Unsupported(String),     // GD_E_UNSUPPORTED
-}
-impl GdError {
-    fn message(&self) -> &str {
-        match self {
-            GdError::Alloc(msg) => msg,
-            GdError::Accmode(msg) => msg,
-            GdError::Argument(msg) => msg,
-            GdError::BadCode(msg) => msg,
-            GdError::BadDirfile(msg) => msg,
-            GdError::BadEntry(msg) => msg,
-            GdError::BadFieldType(msg) => msg,
-            GdError::BadIndex(msg) => msg,
-            GdError::BadReference(msg) => msg,
-            GdError::BadScalar(msg) => msg,
-            GdError::BadType(msg) => msg,
-            GdError::Bounds(msg) => msg,
-            GdError::Callback(msg) => msg,
-            GdError::Creat(msg) => msg,
-            GdError::Delete(msg) => msg,
-            GdError::Dimension(msg) => msg,
-            GdError::Domain(msg) => msg,
-            GdError::Duplicate(msg) => msg,
-            GdError::Exists(msg) => msg,
-            GdError::Format(msg) => msg,
-            GdError::InternalError(msg) => msg,
-            GdError::Io(msg) => msg,
-            GdError::LineTooLong(msg) => msg,
-            GdError::Lut(msg) => msg,
-            GdError::Protected(msg) => msg,
-            GdError::Range(msg) => msg,
-            GdError::RecurseLevel(msg) => msg,
-            GdError::UncleanDb(msg) => msg,
-            GdError::UnknownEncoding(msg) => msg,
-            GdError::Unsupported(msg) => msg,
-        }
-    }
-}
 
-impl fmt::Display for GdError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "GetData Error: {}", self.message())
-    }
-}
-
-impl error::Error for GdError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        // In this case, we have no underlying error, so we return None.
-        None
-    }
-}
 
 #[derive(Clone, Copy)]
 pub enum GdTypes {
@@ -153,119 +79,7 @@ impl From<GdTypes> for TypeId {
     }
 }
 
-#[derive(Clone)]
-pub enum EntryType {
-    Raw {
-        data_type: Option<GdTypes>,
-        spf: Option<u32>,
-    },
-    Linterp {
-        in_field: Option<CString>, //Input field
-        table: Option<CString>,    //path to lookup table
-    }, // Add other variants here
-}
 
-impl From<&EntryType> for ffi::gd_entype_t {
-    fn from(entry_type: &EntryType) -> Self {
-        match entry_type {
-            EntryType::Raw { .. } => ffi::gd_entype_t_GD_RAW_ENTRY,
-            EntryType::Linterp { .. } => ffi::gd_entype_t_GD_LINTERP_ENTRY,
-            // Add other variants here
-        }
-    }
-}
-
-impl From<ffi::gd_entype_t> for EntryType {
-    fn from(entry_type: ffi::gd_entype_t) -> Self {
-        match entry_type {
-            ffi::gd_entype_t_GD_RAW_ENTRY => EntryType::Raw {
-                data_type: None,
-                spf: None,
-            },
-            _ => {
-                panic!("Unsupported entry type");
-            }
-        }
-    }
-}
-impl EntryType {
-    pub fn new_raw(data_type: GdTypes, spf: u32) -> Self {
-        EntryType::Raw {
-            data_type: Some(data_type),
-            spf: Some(spf),
-        }
-    }
-    pub fn new_linterp(in_field: &str, table: &str) -> Self {
-        EntryType::Linterp {
-            in_field: Some(CString::new(in_field.to_owned()).unwrap()),
-            table: Some(CString::new(table.to_owned()).unwrap()),
-        }
-    }
-}
-
-pub struct Entry {
-    pub field_code: String,
-    pub fragment_index: i32,
-    pub entry_type: EntryType,
-    entry_c: ffi::gd_entry_t,
-    _field_code_c: CString, //keep this around to make sure the string is not deallocated, it is used in the entry_c
-}
-
-impl Entry {
-    pub fn new(field_code: &str, fragment_index: i32, entry_type: EntryType) -> Entry {
-        let field_code_c = CString::new(field_code).unwrap();
-        let mut entry_c: ffi::gd_entry_t;
-        unsafe {
-            entry_c = std::mem::zeroed();
-        }
-        //assign the field name
-        entry_c.field = field_code_c.as_ptr() as *mut i8;
-        match &entry_type {
-            EntryType::Raw { data_type, spf } => {
-                entry_c.field_type = ffi::gd_entype_t_GD_RAW_ENTRY;
-                entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type = data_type.unwrap().into();
-                entry_c.__bindgen_anon_1.__bindgen_anon_1.spf = spf.unwrap();
-            }
-            EntryType::Linterp { in_field, table } => {
-                entry_c.field_type = ffi::gd_entype_t_GD_LINTERP_ENTRY;
-                entry_c.in_fields[0] = in_field.as_ref().unwrap().as_ptr() as *mut i8;
-                entry_c.__bindgen_anon_1.__bindgen_anon_6.table =
-                    table.as_ref().unwrap().as_ptr() as *mut i8;
-            }
-        }
-        Entry {
-            field_code: field_code.to_string(),
-            fragment_index: fragment_index,
-            entry_type: entry_type,
-            entry_c: entry_c,
-            _field_code_c: field_code_c,
-        }
-    }
-    fn from_c(field_code: &str, fragment_index: i32, entry_c: ffi::gd_entry_t) -> Entry {
-        let field_code_c: CString = CString::new(field_code).unwrap();
-
-        let entry_type: EntryType = unsafe {
-            match EntryType::from(entry_c.field_type) {
-                EntryType::Raw { .. } => EntryType::Raw {
-                    data_type: Some(GdTypes::from(
-                        entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type,
-                    )),
-                    spf: Some(entry_c.__bindgen_anon_1.__bindgen_anon_1.spf),
-                },
-                _ => {
-                    panic!("Unsupported entry type");
-                }
-            }
-        };
-        Entry {
-            field_code: field_code.to_string(),
-            fragment_index: fragment_index,
-            entry_type: entry_type,
-            entry_c: entry_c,
-            _field_code_c: field_code_c,
-        }
-    }
-}
 
 pub enum FieldOrEntry {
     Field(String),
@@ -321,7 +135,7 @@ impl Dirfile {
 
         let field_code_c = match field_or_entry {
             FieldOrEntry::Field(field_code) => CString::new(field_code).unwrap(),
-            FieldOrEntry::Entry(entry) => entry._field_code_c,
+            FieldOrEntry::Entry(entry) => entry.field.clone(),
         };
 
         let ret_val = unsafe {
@@ -355,7 +169,7 @@ impl Dirfile {
             return Err(self.get_error().unwrap());
         }
 
-        let entry = Entry::from_c(field_code.to_str().unwrap(), 0, entry_c);
+        let entry = Entry::from_c(field_code.to_str().unwrap(), entry_c);
         Ok(entry)
     }
 
@@ -369,30 +183,30 @@ impl Dirfile {
             FieldOrEntry::Field(field_code) => self.get_entry(&field_code).unwrap(),
             FieldOrEntry::Entry(entry) => entry,
         };
-        match entry.entry_type {
+        match entry.field_type {
             //only raw data is supported for now
-            EntryType::Raw { data_type, spf } => {
+            EntryType::Raw( raw_data) => {
                 //check that the type is correct
+                let gd_type = GdTypes::from(raw_data.gd_type);
                 assert_eq!(
-                    TypeId::from(data_type.unwrap()),
+                    TypeId::from(gd_type),
                     TypeId::of::<T>(),
                     "Data type mismatch"
                 );
                 //figure out how much data to write
-                let num_frames: usize = data.len() / spf.unwrap() as usize;
-                let num_samples: usize = data.len() % spf.unwrap() as usize;
-                //create a c string
-                let field_code = CString::new(entry.field_code).unwrap();
+                let num_frames: usize = data.len() / raw_data.spf as usize;
+                let num_samples: usize = data.len() % raw_data.spf as usize;
+
                 //write data, will need to update the offset and stuff...
                 let write_n = unsafe {
                     ffi::gd_putdata(
                         self.dirfile.expect("Open the dirfile!").as_ptr(),
-                        field_code.as_ptr(),
+                        entry.field.as_ptr() as *const i8,
                         ffi::GD_HERE.into(),
                         0,
                         num_frames,
                         num_samples,
-                        data_type.unwrap().into(),
+                        raw_data.gd_type,
                         data.as_ptr() as *const std::ffi::c_void,
                     )
                 };
@@ -404,8 +218,8 @@ impl Dirfile {
                 }
                 Ok(write_n)
             }
-            EntryType::Linterp { .. } => {
-                panic!("cant put data for linterp, only put data for RAW");
+            _ => {
+                panic!("only put data for RAW");
             }
         }
     }
@@ -433,51 +247,4 @@ impl Dirfile {
         Ok(())
     }
 
-    pub fn get_error(&self) -> Option<GdError> {
-        let error = unsafe { ffi::gd_error(self.dirfile.unwrap().as_ptr()) };
-        if error == ffi::GD_E_OK as i32 {
-            return None;
-        }
-        let error_string_ptr = unsafe {
-            ffi::gd_error_string(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut(), 0)
-        };
-        let error_string_cstr: &CStr = unsafe { CStr::from_ptr(error_string_ptr) };
-        let error_string = error_string_cstr.to_string_lossy().into_owned();
-        unsafe { libc::free(error_string_ptr as *mut libc::c_void) }; // Free the error string
-        match error {
-            ffi::GD_E_ALLOC => Some(GdError::Alloc(error_string)),
-            ffi::GD_E_ACCMODE => Some(GdError::Accmode(error_string)),
-            ffi::GD_E_ARGUMENT => Some(GdError::Argument(error_string)),
-            ffi::GD_E_BAD_CODE => Some(GdError::BadCode(error_string)),
-            ffi::GD_E_BAD_DIRFILE => Some(GdError::BadDirfile(error_string)),
-            ffi::GD_E_BAD_ENTRY => Some(GdError::BadEntry(error_string)),
-            ffi::GD_E_BAD_FIELD_TYPE => Some(GdError::BadFieldType(error_string)),
-            ffi::GD_E_BAD_INDEX => Some(GdError::BadIndex(error_string)),
-            ffi::GD_E_BAD_REFERENCE => Some(GdError::BadReference(error_string)),
-            ffi::GD_E_BAD_SCALAR => Some(GdError::BadScalar(error_string)),
-            ffi::GD_E_BAD_TYPE => Some(GdError::BadType(error_string)),
-            ffi::GD_E_BOUNDS => Some(GdError::Bounds(error_string)),
-            ffi::GD_E_CALLBACK => Some(GdError::Callback(error_string)),
-            ffi::GD_E_CREAT => Some(GdError::Creat(error_string)),
-            ffi::GD_E_DELETE => Some(GdError::Delete(error_string)),
-            ffi::GD_E_DIMENSION => Some(GdError::Dimension(error_string)),
-            ffi::GD_E_DOMAIN => Some(GdError::Domain(error_string)),
-            ffi::GD_E_DUPLICATE => Some(GdError::Duplicate(error_string)),
-            ffi::GD_E_EXISTS => Some(GdError::Exists(error_string)),
-            ffi::GD_E_FORMAT => Some(GdError::Format(error_string)),
-            ffi::GD_E_INTERNAL_ERROR => Some(GdError::InternalError(error_string)),
-            ffi::GD_E_IO => Some(GdError::Io(error_string)),
-            ffi::GD_E_LINE_TOO_LONG => Some(GdError::LineTooLong(error_string)),
-            ffi::GD_E_LUT => Some(GdError::Lut(error_string)),
-            ffi::GD_E_PROTECTED => Some(GdError::Protected(error_string)),
-            ffi::GD_E_RANGE => Some(GdError::Range(error_string)),
-            ffi::GD_E_RECURSE_LEVEL => Some(GdError::RecurseLevel(error_string)),
-            ffi::GD_E_UNCLEAN_DB => Some(GdError::UncleanDb(error_string)),
-            ffi::GD_E_UNKNOWN_ENCODING => Some(GdError::UnknownEncoding(error_string)),
-            ffi::GD_E_UNSUPPORTED => Some(GdError::Unsupported(error_string)),
-            _ => {
-                panic!("Unsupported error");
-            }
-        }
-    }
 }

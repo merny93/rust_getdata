@@ -96,15 +96,15 @@ fn test_highlevel_add_entry(){
         std::fs::remove_dir_all(file_name).unwrap();
     }
     let mut dirfile = super::Dirfile::open(file_name).unwrap();
-    let entry = Entry::new("testfield", 0, EntryType::new_raw(GdTypes::Float32, 10));
+    let entry = Entry::new_raw("testfield", 10, GdTypes::Float32);
     dirfile.add(&entry).unwrap();
-    let entry_interp = Entry::new("testfield_interp", 0, EntryType::new_linterp("testfield", "test_lut.lut"));
+    let entry_interp = Entry::new_linterp("testfield_interp", "testfield" ,"test_lut.lut");
     dirfile.add(&entry_interp).unwrap();
     //add a alias
     dirfile.add_alias("test_alias", FieldOrEntry::Entry(entry)).unwrap();
     dirfile.close();
 
-    panic!("test_highlevel_add_entry");
+    // panic!("test_highlevel_add_entry");
     // //check for the existance of the folder
     let path = std::path::Path::new(file_name);
     assert!(path.exists());
@@ -117,15 +117,17 @@ fn test_highlevel_add_entry(){
     // testfield RAW FLOAT32 10
     // /REFERENCE testfield
     // /ALIAS test_alias testfield
+    // testfield_interp LINTERP testfield test_lut.lut
     // this will be somewhere in that file but not at the top
     let format_file = std::fs::read_to_string(format!("{}/format", file_name)).unwrap();
     assert!(format_file.contains("testfield RAW FLOAT32 10"));
     assert!(format_file.contains("/REFERENCE testfield")); 
     assert!(format_file.contains("/ALIAS test_alias testfield"));
+    assert!(format_file.contains("testfield_interp LINTERP testfield test_lut.lut"));
 
     let mut dirfile = Dirfile::open(file_name).unwrap();
     let entry = dirfile.get_entry("testfield").unwrap();
-    assert_eq!(entry.field_code, "testfield");
+    assert_eq!(entry.get_field_code(), "testfield");
 
     //try to put data!
     let npoint = 33;
