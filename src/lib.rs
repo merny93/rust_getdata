@@ -10,15 +10,17 @@ mod tests;
 
 mod entry;
 
-use entry::{Entry, EntryType};
+pub use entry::{Entry, EntryType};
+
 
 mod gd_error;
 
-use gd_error::GdError;
+pub use gd_error::GdError;
 
 use std::any::TypeId;
 
 use std::ffi::CString;
+use std::any::Any;
 
 
 //lets make a struct to hold the dirfile

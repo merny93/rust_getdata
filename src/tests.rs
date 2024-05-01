@@ -102,6 +102,10 @@ fn test_highlevel_add_entry(){
     dirfile.add(&entry_interp).unwrap();
     //add a alias
     dirfile.add_alias("test_alias", FieldOrEntry::Entry(entry)).unwrap();
+
+    let lincom = Entry::new_lincom("test_lincom", vec!["testfield"], vec![1.0], vec![0.0]);
+    dirfile.add(&lincom).unwrap();
+
     dirfile.close();
 
     // panic!("test_highlevel_add_entry");
@@ -118,12 +122,14 @@ fn test_highlevel_add_entry(){
     // /REFERENCE testfield
     // /ALIAS test_alias testfield
     // testfield_interp LINTERP testfield test_lut.lut
+    // test_lincom LINCOM 1 testfield 1 0
     // this will be somewhere in that file but not at the top
     let format_file = std::fs::read_to_string(format!("{}/format", file_name)).unwrap();
     assert!(format_file.contains("testfield RAW FLOAT32 10"));
     assert!(format_file.contains("/REFERENCE testfield")); 
     assert!(format_file.contains("/ALIAS test_alias testfield"));
     assert!(format_file.contains("testfield_interp LINTERP testfield test_lut.lut"));
+    assert!(format_file.contains("test_lincom LINCOM 1 testfield 1 0"));
 
     let mut dirfile = Dirfile::open(file_name).unwrap();
     let entry = dirfile.get_entry("testfield").unwrap();

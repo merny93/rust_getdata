@@ -1,4 +1,4 @@
-use crate::ffi::{self, gd_entype_t_GD_RAW_ENTRY};
+use crate::ffi;
 use std::ffi::CString;
 pub struct Entry {
     pub field: CString,
@@ -13,7 +13,7 @@ pub enum EntryType {
     Carry,
     Const,
     Divide,
-    Lincom,
+    Lincom(LincomData),
     Linterp(LinterpData),
     Mplex,
     Multiply,
@@ -32,9 +32,16 @@ pub struct RawData {
     pub gd_type: ffi::gd_type_t,
 }
 
-struct LinterpData {
+pub struct LinterpData {
     in_field: CString,
     table: CString,
+}
+
+pub struct LincomData {
+    in_fields: (CString, CString, CString),
+    n_fields: i32,
+    m: (f64, f64, f64),
+    b: (f64, f64, f64),
 }
 
 impl Entry {
@@ -75,7 +82,6 @@ impl Entry {
             table: CString::new(table).unwrap(),
         };
 
-        
         entry.entry_c.field_type = ffi::gd_entype_t_GD_LINTERP_ENTRY;
         entry.entry_c.in_fields[0] = linterp_data.in_field.as_ptr() as *mut i8;
         entry.entry_c.__bindgen_anon_1.__bindgen_anon_6.table =
@@ -86,23 +92,92 @@ impl Entry {
 
         entry
     }
+    pub fn new_lincom(
+        field_code: &str,
+        in_fields: Vec<&str>,
+        m: Vec<f64>,
+        b: Vec<f64>,
+    ) -> Entry {
+        let mut entry = Entry::_new(field_code); //assigns "field"
+        let n_fields = in_fields.len() as i32;
+        let mut lincom_data = LincomData {
+            in_fields: (
+                CString::new("").unwrap(),
+                CString::new("").unwrap(),
+                CString::new("").unwrap(),
+            ),
+            n_fields: n_fields,
+            m: (0.0, 0.0, 0.0),
+            b: (0.0, 0.0, 0.0),
+        };
+        match n_fields {
+            1 => {
+                lincom_data.in_fields.0 = CString::new(in_fields[0]).unwrap();
+                entry.entry_c.in_fields[0] = lincom_data.in_fields.0.as_ptr() as *mut i8;
+                lincom_data.n_fields = 1;
+                lincom_data.m.0 = m[0];
+                lincom_data.b.0 = b[0];
+            }
+            2 => {
+                lincom_data.in_fields.0 = CString::new(in_fields[0]).unwrap();
+                lincom_data.in_fields.1 = CString::new(in_fields[1]).unwrap();
+                entry.entry_c.in_fields[0] = lincom_data.in_fields.0.as_ptr() as *mut i8;
+                entry.entry_c.in_fields[1] = lincom_data.in_fields.1.as_ptr() as *mut i8;
+                lincom_data.n_fields = 2;
+                lincom_data.m.0 = m[0];
+                lincom_data.m.1 = m[1];
+                lincom_data.b.0 = b[0];
+                lincom_data.b.1 = b[1];
+            }
+            3 => {
+                lincom_data.in_fields.0 = CString::new(in_fields[0]).unwrap();
+                lincom_data.in_fields.1 = CString::new(in_fields[1]).unwrap();
+                lincom_data.in_fields.2 = CString::new(in_fields[2]).unwrap();
+                entry.entry_c.in_fields[0] = lincom_data.in_fields.0.as_ptr() as *mut i8;
+                entry.entry_c.in_fields[1] = lincom_data.in_fields.1.as_ptr() as *mut i8;
+                entry.entry_c.in_fields[2] = lincom_data.in_fields.2.as_ptr() as *mut i8;
+                lincom_data.n_fields = 3;
+                lincom_data.m.0 = m[0];
+                lincom_data.m.1 = m[1];
+                lincom_data.m.2 = m[2];
+                lincom_data.b.0 = b[0];
+                lincom_data.b.1 = b[1];
+                lincom_data.b.2 = b[2];
+            }
+            _ => panic!("Invalid number of fields"),
+        }
+
+        entry.entry_c.field_type = ffi::gd_entype_t_GD_LINCOM_ENTRY;
+        entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.n_fields = n_fields;
+        unsafe {
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.m[0] = lincom_data.m.0;
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.m[1] = lincom_data.m.1;
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.m[2] = lincom_data.m.2;
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.b[0] = lincom_data.b.0;
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.b[1] = lincom_data.b.1;
+            entry.entry_c.__bindgen_anon_1.__bindgen_anon_2.b[2] = lincom_data.b.2;
+        }
+
+        let type_data = EntryType::Lincom(lincom_data);
+        entry.field_type = type_data;
+
+        entry
+    }
     pub fn from_c(field_code: &str, entry_c: ffi::gd_entry_t) -> Entry {
         let field_code_c: CString = CString::new(field_code).unwrap();
 
         let entry_type: EntryType = unsafe {
             match entry_c.field_type {
-                ffi::gd_entype_t_GD_RAW_ENTRY => {
-                    EntryType::Raw(RawData {
-                        spf: entry_c.__bindgen_anon_1.__bindgen_anon_1.spf,
-                        gd_type: entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type,
-                    })
-                }
-                ffi::gd_entype_t_GD_LINTERP_ENTRY => {
-                    EntryType::Linterp(LinterpData {
-                        in_field: CString::from_raw(entry_c.in_fields[0] as *mut i8),
-                        table: CString::from_raw(entry_c.__bindgen_anon_1.__bindgen_anon_6.table as *mut i8),
-                    })
-                }
+                ffi::gd_entype_t_GD_RAW_ENTRY => EntryType::Raw(RawData {
+                    spf: entry_c.__bindgen_anon_1.__bindgen_anon_1.spf,
+                    gd_type: entry_c.__bindgen_anon_1.__bindgen_anon_1.data_type,
+                }),
+                ffi::gd_entype_t_GD_LINTERP_ENTRY => EntryType::Linterp(LinterpData {
+                    in_field: CString::from_raw(entry_c.in_fields[0] as *mut i8),
+                    table: CString::from_raw(
+                        entry_c.__bindgen_anon_1.__bindgen_anon_6.table as *mut i8,
+                    ),
+                }),
                 _ => panic!("Unknown entry type, memory leak!"),
             }
         };
