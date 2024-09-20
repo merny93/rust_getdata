@@ -12,7 +12,6 @@ mod entry;
 
 pub use entry::{Entry, EntryType};
 
-
 mod gd_error;
 
 pub use gd_error::GdError;
@@ -20,14 +19,12 @@ pub use gd_error::GdError;
 use std::any::TypeId;
 
 use std::ffi::CString;
-use std::any::Any;
-
 
 //lets make a struct to hold the dirfile
-pub struct Dirfile {
+#[derive(Default)]
+pub struct Dirfile{
     dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
 }
-
 
 #[derive(Clone, Copy)]
 pub enum GdTypes {
@@ -81,8 +78,6 @@ impl From<GdTypes> for TypeId {
     }
 }
 
-
-
 pub enum FieldOrEntry {
     Field(String),
     Entry(Entry),
@@ -96,10 +91,12 @@ impl Dirfile {
             unsafe { ffi::gd_open(dirfile_name.as_ptr(), (ffi::GD_RDWR | ffi::GD_CREAT).into()) };
         let df = Dirfile {
             dirfile: std::ptr::NonNull::new(dirfile),
+            ..Default::default()
         };
         match df.get_error() {
             None => Ok(Dirfile {
                 dirfile: std::ptr::NonNull::new(dirfile),
+                ..Default::default()
             }),
             Some(error) => {
                 unsafe { ffi::gd_close(dirfile) };
@@ -175,20 +172,25 @@ impl Dirfile {
         Ok(entry)
     }
 
-    /// puts data vectors, returns if the write was successful
-    pub fn putdata<T: 'static>(
-        &mut self,
-        field_or_entry: FieldOrEntry,
+    pub fn putdata_field<T: 'static>(
+        &self,
+        field_code: &str,
         data: &Vec<T>,
     ) -> Result<usize, GdError> {
-        let entry = match field_or_entry {
-            FieldOrEntry::Field(field_code) => self.get_entry(&field_code).unwrap(),
-            FieldOrEntry::Entry(entry) => entry,
-        };
-        match entry.field_type {
-            //only raw data is supported for now
-            EntryType::Raw( raw_data) => {
-                //check that the type is correct
+        let entry = self.get_entry(field_code)?;
+        self.putdata(&entry, data)
+    }
+
+    /// puts data vectors, returns if the write was successful
+    pub fn putdata<T: 'static>(
+        &self,
+        entry: &Entry,
+        data: &Vec<T>,
+    ) -> Result<usize, GdError> {
+        match &entry.field_type {
+            // only raw data is supported for now
+            EntryType::Raw(raw_data) => {
+                // check that the type is correct
                 let gd_type = GdTypes::from(raw_data.gd_type);
                 assert_eq!(
                     TypeId::from(gd_type),
@@ -248,5 +250,4 @@ impl Dirfile {
         }
         Ok(())
     }
-
 }

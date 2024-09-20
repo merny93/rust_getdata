@@ -138,9 +138,9 @@ fn test_highlevel_add_entry(){
     //try to put data!
     let npoint = 33;
     let data: Vec<f32> = vec![42.0; npoint];
-    dirfile.putdata(FieldOrEntry::Field("testfield".to_string()), &data).unwrap();
-    dirfile.putdata(FieldOrEntry::Field("testfield".to_string()), &data).unwrap();
-    dirfile.putdata(FieldOrEntry::Field("testfield".to_string()), &data).unwrap();
+    dirfile.putdata_field("testfield", &data).unwrap();
+    dirfile.putdata_field("testfield", &data).unwrap();
+    dirfile.putdata_field("testfield", &data).unwrap();
 
     dirfile.close();
 
