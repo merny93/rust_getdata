@@ -93,12 +93,12 @@ impl error::Error for GdError {
 
 impl crate::Dirfile{
     pub fn get_error(&self) -> Option<GdError> {
-        let error = unsafe { ffi::gd_error(self.dirfile.unwrap().as_ptr()) };
+        let error = unsafe { ffi::gd_error(self.dirfile.lock().unwrap().unwrap().as_ptr()) };
         if error == ffi::GD_E_OK as i32 {
             return None;
         }
         let error_string_ptr = unsafe {
-            ffi::gd_error_string(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut(), 0)
+            ffi::gd_error_string(self.dirfile.lock().unwrap().unwrap().as_ptr(), std::ptr::null_mut(), 0)
         };
         let error_string_c = unsafe { CString::from_raw(error_string_ptr as *mut i8) }; //takes ownership of the pointer
         let error_string = error_string_c.to_str().unwrap().to_string(); //error wants to own the string

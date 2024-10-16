@@ -148,7 +148,7 @@ fn test_highlevel_add_entry(){
     let mut dirfile = Dirfile::open(file_name).unwrap();
     let mut data_read: Vec<f32> = vec![0.0; npoint];
     let fc = CString::new("testfield").unwrap();
-    let n_pts = unsafe {ffi::gd_getdata(dirfile.dirfile.unwrap().as_ptr(), fc.as_ptr(), 0, 0, 3, 3, gd_type_t_GD_FLOAT32, data_read.as_mut_ptr() as *mut c_void) };
+    let n_pts = unsafe {ffi::gd_getdata(dirfile.dirfile.lock().unwrap().unwrap().as_ptr(), fc.as_ptr(), 0, 0, 3, 3, gd_type_t_GD_FLOAT32, data_read.as_mut_ptr() as *mut c_void) };
     assert!(n_pts == npoint);
     assert_eq!(data, data_read);
     dirfile.close();
@@ -170,7 +170,7 @@ fn test_highlevel_error(){
     let dirfile = dirfile.unwrap();
     unsafe{
     let fieldcode = CString::new("testfield").unwrap();
-    let _n_pts = gd_getdata(dirfile.dirfile.unwrap().as_ptr(), fieldcode.as_ptr(), 0, 0, 10, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
+    let _n_pts = gd_getdata(dirfile.dirfile.lock().unwrap().unwrap().as_ptr(), fieldcode.as_ptr(), 0, 0, 10, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
     }
     let er = dirfile.get_error().unwrap();
     assert_eq!(er.message(), &"Field not found: testfield".to_string());

@@ -19,12 +19,15 @@ pub use gd_error::GdError;
 use std::any::TypeId;
 
 use std::ffi::CString;
+use std::sync::Mutex;
 
 //lets make a struct to hold the dirfile
 #[derive(Default)]
-pub struct Dirfile{
-    dirfile: Option<std::ptr::NonNull<ffi::DIRFILE>>,
+pub struct Dirfile {
+    dirfile: Mutex<Option<std::ptr::NonNull<ffi::DIRFILE>>>,
 }
+
+unsafe impl Send for Dirfile {}
 
 #[derive(Clone, Copy)]
 pub enum GdTypes {
@@ -90,12 +93,12 @@ impl Dirfile {
         let dirfile =
             unsafe { ffi::gd_open(dirfile_name.as_ptr(), (ffi::GD_RDWR | ffi::GD_CREAT).into()) };
         let df = Dirfile {
-            dirfile: std::ptr::NonNull::new(dirfile),
+            dirfile: Mutex::new(std::ptr::NonNull::new(dirfile)),
             ..Default::default()
         };
         match df.get_error() {
             None => Ok(Dirfile {
-                dirfile: std::ptr::NonNull::new(dirfile),
+                dirfile: Mutex::new(std::ptr::NonNull::new(dirfile)),
                 ..Default::default()
             }),
             Some(error) => {
@@ -106,15 +109,27 @@ impl Dirfile {
     }
     /// Close the dirfile
     pub fn close(&mut self) {
-        unsafe { ffi::gd_close(self.dirfile.expect("open dirfile!").as_ptr()) };
-        self.dirfile = None;
+        unsafe {
+            ffi::gd_close(
+                self.dirfile
+                    .lock()
+                    .unwrap()
+                    .expect("open dirfile!")
+                    .as_ptr(),
+            )
+        };
+        self.dirfile = Mutex::new(None);
     }
 
     /// add entry
     pub fn add(&mut self, entry: &Entry) -> Result<(), GdError> {
         let ret_val = unsafe {
             ffi::gd_add(
-                self.dirfile.expect("Open the dirfile!").as_ptr(),
+                self.dirfile
+                    .lock()
+                    .unwrap()
+                    .expect("Open the dirfile!")
+                    .as_ptr(),
                 &entry.entry_c,
             )
         };
@@ -139,7 +154,7 @@ impl Dirfile {
 
         let ret_val = unsafe {
             ffi::gd_add_alias(
-                self.dirfile.expect("Open the dirfile!").as_ptr(),
+                self.dirfile.lock().unwrap().expect("Open the dirfile!").as_ptr(),
                 alias_name.as_ptr(),
                 field_code_c.as_ptr(),
                 0,
@@ -159,7 +174,7 @@ impl Dirfile {
         }
         let ret_val = unsafe {
             ffi::gd_entry(
-                self.dirfile.expect("Open the dirfile!").as_ptr(),
+                self.dirfile.lock().unwrap().expect("Open the dirfile!").as_ptr(),
                 field_code.as_ptr(),
                 &mut entry_c,
             )
@@ -182,11 +197,7 @@ impl Dirfile {
     }
 
     /// puts data vectors, returns if the write was successful
-    pub fn putdata<T: 'static>(
-        &self,
-        entry: &Entry,
-        data: &Vec<T>,
-    ) -> Result<usize, GdError> {
+    pub fn putdata<T: 'static>(&self, entry: &Entry, data: &Vec<T>) -> Result<usize, GdError> {
         match &entry.field_type {
             // only raw data is supported for now
             EntryType::Raw(raw_data) => {
@@ -204,7 +215,7 @@ impl Dirfile {
                 //write data, will need to update the offset and stuff...
                 let write_n = unsafe {
                     ffi::gd_putdata(
-                        self.dirfile.expect("Open the dirfile!").as_ptr(),
+                        self.dirfile.lock().unwrap().expect("Open the dirfile!").as_ptr(),
                         entry.field.as_ptr() as *const i8,
                         ffi::GD_HERE.into(),
                         0,
@@ -230,21 +241,21 @@ impl Dirfile {
 
     pub fn flush(&mut self) -> Result<(), GdError> {
         let ret_val =
-            unsafe { ffi::gd_flush(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut()) };
+            unsafe { ffi::gd_flush(self.dirfile.lock().unwrap().unwrap().as_ptr(), std::ptr::null_mut()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
         }
         Ok(())
     }
     pub fn sync(&mut self) -> Result<(), GdError> {
-        let ret_val = unsafe { ffi::gd_sync(self.dirfile.unwrap().as_ptr(), std::ptr::null_mut()) };
+        let ret_val = unsafe { ffi::gd_sync(self.dirfile.lock().unwrap().unwrap().as_ptr(), std::ptr::null_mut()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
         }
         Ok(())
     }
     pub fn metaflush(&mut self) -> Result<(), GdError> {
-        let ret_val = unsafe { ffi::gd_metaflush(self.dirfile.unwrap().as_ptr()) };
+        let ret_val = unsafe { ffi::gd_metaflush(self.dirfile.lock().unwrap().unwrap().as_ptr()) };
         if ret_val != 0 {
             return Err(self.get_error().unwrap());
         }
