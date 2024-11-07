@@ -1,12 +1,7 @@
-use std::error;
-use std::fmt;
 use crate::ffi;
+use std::error::{self, Error};
 use std::ffi::CString;
-
-
-
-
-
+use std::fmt;
 
 #[derive(Debug)]
 pub enum GdError {
@@ -40,6 +35,8 @@ pub enum GdError {
     UncleanDb(String),       // GD_E_UNCLEAN_DB
     UnknownEncoding(String), // GD_E_UNKNOWN_ENCODING
     Unsupported(String),     // GD_E_UNSUPPORTED
+    DirfileNotOpen,          // custom rust error
+    DirfileBusy,             // custom rust error
 }
 impl GdError {
     pub fn message(&self) -> &str {
@@ -74,6 +71,7 @@ impl GdError {
             GdError::UncleanDb(msg) => msg,
             GdError::UnknownEncoding(msg) => msg,
             GdError::Unsupported(msg) => msg,
+            _ => "",
         }
     }
 }
@@ -91,14 +89,28 @@ impl error::Error for GdError {
     }
 }
 
-impl crate::Dirfile{
+impl crate::Dirfile {
+    pub fn get_error_boxed(&self) -> Box<dyn Error> {
+        Box::new(self.get_error().expect("No error found"))
+    }
+
     pub fn get_error(&self) -> Option<GdError> {
-        let error = unsafe { ffi::gd_error(self.dirfile.lock().unwrap().unwrap().as_ptr()) };
+        //get the error count. this will also clear the count in the process!
+        let error_count = unsafe { ffi::gd_error_count(self.dirfile_get().unwrap()) };
+        //we should fix this... there can be many errors!
+        if error_count == 0 {
+            return None;
+        }
+        let error = unsafe { ffi::gd_error(self.dirfile_get().unwrap()) };
         if error == ffi::GD_E_OK as i32 {
             return None;
         }
         let error_string_ptr = unsafe {
-            ffi::gd_error_string(self.dirfile.lock().unwrap().unwrap().as_ptr(), std::ptr::null_mut(), 0)
+            ffi::gd_error_string(
+                self.dirfile_get().unwrap(),
+                std::ptr::null_mut(),
+                0,
+            )
         };
         let error_string_c = unsafe { CString::from_raw(error_string_ptr as *mut i8) }; //takes ownership of the pointer
         let error_string = error_string_c.to_str().unwrap().to_string(); //error wants to own the string

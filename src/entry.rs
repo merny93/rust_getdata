@@ -1,5 +1,5 @@
 use crate::ffi;
-use std::ffi::CString;
+use std::{f64::consts::E, ffi::CString};
 pub struct Entry {
     pub field: CString,
     pub field_type: EntryType,
@@ -63,7 +63,7 @@ impl Entry {
         entry.entry_c.field = entry.field.as_ptr() as *mut i8;
         entry
     }
-    pub fn new_raw(field_code: &str, spf: u32, gd_type: crate::GdTypes) -> Entry {
+    pub fn new_raw(field_code: &str, spf: u32, gd_type: crate::gd_types::GdTypes) -> Entry {
         let type_data = EntryType::Raw(RawData {
             spf: spf,
             gd_type: gd_type.into(),

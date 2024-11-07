@@ -1,6 +1,6 @@
 use super::ffi::*;
-use std::ffi::CString;
 use std::ffi::c_void;
+use std::ffi::CString;
 #[test]
 fn test_gd_open_close() {
     let file_name = "__testdirfile__";
@@ -23,28 +23,36 @@ fn test_gd_open_close() {
 }
 
 #[test]
-fn test_gd_putgetdata(){
+fn test_gd_putget_lowlevel() {
     let file_name = "__testdirfile2__";
     let path = std::path::Path::new(file_name);
     if path.exists() {
         std::fs::remove_dir_all(file_name).unwrap();
     }
     unsafe {
-        let filename= CString::new(file_name).unwrap();
+        let filename = CString::new(file_name).unwrap();
         let fieldcode = CString::new("testfield").unwrap();
 
         //open dirfile
         let dirfile = gd_open(filename.as_ptr(), (GD_RDWR | GD_CREAT).into());
-        
+
         //add the field and flush metadata
-        gd_add_raw(dirfile, fieldcode.as_ptr(),  gd_type_t_GD_FLOAT32, 1, 0);
+        gd_add_raw(dirfile, fieldcode.as_ptr(), gd_type_t_GD_FLOAT32, 1, 0);
         gd_metaflush(dirfile);
         gd_flush(dirfile, std::ptr::null_mut());
 
-
         let npoint = 10;
         let mut data: Vec<f32> = vec![42.0; npoint];
-        let write_n = gd_putdata(dirfile, fieldcode.as_ptr(), 0, 0,npoint, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
+        let write_n = gd_putdata(
+            dirfile,
+            fieldcode.as_ptr(),
+            0,
+            0,
+            npoint,
+            0,
+            gd_type_t_GD_FLOAT32,
+            data.as_mut_ptr() as *mut c_void,
+        );
         assert_eq!(write_n, npoint, "gd_putdata failed with error: {}", write_n);
 
         gd_flush(dirfile, std::ptr::null_mut());
@@ -56,9 +64,21 @@ fn test_gd_putgetdata(){
         //read the data back
         let mut data_read: Vec<f32> = vec![0.0; npoint];
 
-        let n_pts = gd_getdata(dirfile, fieldcode.as_ptr(), 0, 0, npoint, 0, gd_type_t_GD_FLOAT32, data_read.as_mut_ptr() as *mut c_void);
+        let n_pts = gd_getdata(
+            dirfile,
+            fieldcode.as_ptr(),
+            0,
+            0,
+            npoint,
+            0,
+            gd_type_t_GD_FLOAT32,
+            data_read.as_mut_ptr() as *mut c_void,
+        );
         assert_eq!(n_pts, npoint, "gd_getdata failed with error: {}", n_pts);
-        assert_eq!(data, data_read, "data read from file is not the same as data written to file");
+        assert_eq!(
+            data, data_read,
+            "data read from file is not the same as data written to file"
+        );
 
         gd_close(dirfile);
     }
@@ -67,9 +87,7 @@ fn test_gd_putgetdata(){
     assert!(path.exists());
     // //delete the folder
     std::fs::remove_dir_all(file_name).unwrap();
-    
 }
-
 
 #[test]
 fn test_highlevel_open_close() {
@@ -79,7 +97,7 @@ fn test_highlevel_open_close() {
         std::fs::remove_dir_all(file_name).unwrap();
     }
     let mut dirfile = super::Dirfile::open(file_name).unwrap();
-    dirfile.close();
+    dirfile.close().unwrap();
     //check for the existance of the folder
     let path = std::path::Path::new(file_name);
     assert!(path.exists());
@@ -88,7 +106,7 @@ fn test_highlevel_open_close() {
 }
 
 #[test]
-fn test_highlevel_add_entry(){
+fn test_highlevel() {
     use super::*;
     let file_name = "__testdirfile4__";
     let path = std::path::Path::new(file_name);
@@ -96,24 +114,24 @@ fn test_highlevel_add_entry(){
         std::fs::remove_dir_all(file_name).unwrap();
     }
     let mut dirfile = super::Dirfile::open(file_name).unwrap();
-    let entry = Entry::new_raw("testfield", 10, GdTypes::Float32);
+    let entry = Entry::new_raw("testfield", 10, gd_types::GdTypes::Float32);
     dirfile.add(&entry).unwrap();
-    let entry_interp = Entry::new_linterp("testfield_interp", "testfield" ,"test_lut.lut");
+    let entry_interp = Entry::new_linterp("testfield_interp", "testfield", "test_lut.lut");
     dirfile.add(&entry_interp).unwrap();
     //add a alias
-    dirfile.add_alias("test_alias", FieldOrEntry::Entry(entry)).unwrap();
+    dirfile.add_alias("test_alias", "testfield").unwrap();
 
     let lincom = Entry::new_lincom("test_lincom", vec!["testfield"], vec![1.0], vec![0.0]);
     dirfile.add(&lincom).unwrap();
 
-    dirfile.close();
+    dirfile.close().unwrap();
 
     // panic!("test_highlevel_add_entry");
     // //check for the existance of the folder
     let path = std::path::Path::new(file_name);
     assert!(path.exists());
 
-    // there should be a format file inside the folder which contains 
+    // there should be a format file inside the folder which contains
     // /VERSION 10
     // /ENDIAN little
     // /PROTECT none
@@ -126,55 +144,76 @@ fn test_highlevel_add_entry(){
     // this will be somewhere in that file but not at the top
     let format_file = std::fs::read_to_string(format!("{}/format", file_name)).unwrap();
     assert!(format_file.contains("testfield RAW FLOAT32 10"));
-    assert!(format_file.contains("/REFERENCE testfield")); 
+    assert!(format_file.contains("/REFERENCE testfield"));
     assert!(format_file.contains("/ALIAS test_alias testfield"));
     assert!(format_file.contains("testfield_interp LINTERP testfield test_lut.lut"));
     assert!(format_file.contains("test_lincom LINCOM 1 testfield 1 0"));
 
     let mut dirfile = Dirfile::open(file_name).unwrap();
-    let entry = dirfile.get_entry("testfield").unwrap();
+    dirfile.pull_entry("testfield").unwrap();
+    let entry = dirfile.entries.get("testfield").unwrap();
     assert_eq!(entry.get_field_code(), "testfield");
 
     //try to put data!
     let npoint = 33;
     let data: Vec<f32> = vec![42.0; npoint];
-    dirfile.putdata_field("testfield", &data).unwrap();
-    dirfile.putdata_field("testfield", &data).unwrap();
-    dirfile.putdata_field("testfield", &data).unwrap();
+    dirfile.putdata("testfield", &data).unwrap();
+    dirfile.putdata("testfield", &data).unwrap();
+    dirfile.putdata("testfield", &data).unwrap();
 
-    dirfile.close();
+    let mut data_full = data.clone();
+    data_full.extend(data.clone());
+    data_full.extend(data.clone());
+
+    dirfile.close().unwrap();
 
     //open again to read and double check that it works
     let mut dirfile = Dirfile::open(file_name).unwrap();
-    let mut data_read: Vec<f32> = vec![0.0; npoint];
-    let fc = CString::new("testfield").unwrap();
-    let n_pts = unsafe {ffi::gd_getdata(dirfile.dirfile.lock().unwrap().unwrap().as_ptr(), fc.as_ptr(), 0, 0, 3, 3, gd_type_t_GD_FLOAT32, data_read.as_mut_ptr() as *mut c_void) };
-    assert!(n_pts == npoint);
+    let data_read: Vec<f32> = dirfile.getdata("testfield", 0, 0, 3, 3).unwrap();
     assert_eq!(data, data_read);
-    dirfile.close();
 
+    //try to read past the end of the dirfile
+    let data_read: Vec<f32> = dirfile.getdata("testfield", 0, 0, 10, 0).unwrap();
+    assert_eq!(data_full, data_read);
 
+    //try to read the linterp field - this will error out as the lut file does not exist
+    match dirfile.getdata::<f32>("testfield_interp", 0, 0, 10, 0) {
+        Ok(_) => panic!("testfield_interp should have errored out"),
+        Err(e) => {
+            let e = e.downcast_ref::<GdError>().unwrap();
+            assert_eq!(e.message(), "Error opening test_lut.lut: No such file or directory");
+        }
+    }
+
+    dirfile.close().unwrap();
 
     //delete the folder
     std::fs::remove_dir_all(file_name).unwrap();
 }
 
-
 #[test]
-fn test_highlevel_error(){
+fn test_highlevel_error() {
     //lets try to read from a field that does not exist
     let file_name = "__fakedirfilenoexist_";
     let dirfile = super::Dirfile::open(file_name);
     //try to read from it
     let mut data = vec![0.0; 10];
     let dirfile = dirfile.unwrap();
-    unsafe{
-    let fieldcode = CString::new("testfield").unwrap();
-    let _n_pts = gd_getdata(dirfile.dirfile.lock().unwrap().unwrap().as_ptr(), fieldcode.as_ptr(), 0, 0, 10, 0, gd_type_t_GD_FLOAT32, data.as_mut_ptr() as *mut c_void);
+    unsafe {
+        let fieldcode = CString::new("testfield").unwrap();
+        let _n_pts = gd_getdata(
+            dirfile.dirfile_get().unwrap(),
+            fieldcode.as_ptr(),
+            0,
+            0,
+            10,
+            0,
+            gd_type_t_GD_FLOAT32,
+            data.as_mut_ptr() as *mut c_void,
+        );
     }
     let er = dirfile.get_error().unwrap();
     assert_eq!(er.message(), &"Field not found: testfield".to_string());
 
     std::fs::remove_dir_all(file_name).unwrap();
-
 }
