@@ -35,6 +35,8 @@ unsafe impl Send for Dirfile {}
 
 mod gd_types;
 
+pub use gd_types::GdTypes;
+
 impl Dirfile {
     pub fn dirfile_get(&self) -> Result<*mut ffi::DIRFILE, GdError> {
         match self.dirfile {
